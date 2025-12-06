@@ -207,23 +207,21 @@ function resetCanvas() {
 
       const delBtn = document.createElement('div');
       delBtn.textContent = "×";
-
-      delBtn.style.position = "absolute";
-      delBtn.style.top = "-15px";
-      delBtn.style.right = "-15px";
       
-     
+      
+      delBtn.style.position = "absolute";
+      delBtn.style.top = "-15px";   
+      delBtn.style.right = "-15px"; 
+      
+      
       delBtn.style.width = "40px";   
       delBtn.style.height = "40px";
       delBtn.style.lineHeight = "40px";
       delBtn.style.textAlign = "center";
-      
-    
-      delBtn.style.color = "#aaa";  
+      delBtn.style.color = "#999";  
       delBtn.style.fontSize = "20px";
       delBtn.style.cursor = "pointer";
-      delBtn.style.zIndex = "10";
-      
+      delBtn.style.zIndex = "100"; 
      
       delBtn.addEventListener('click', (e) => {
         e.stopPropagation(); 
