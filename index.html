@@ -121,6 +121,15 @@
       posts.unshift(postData);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(posts));
     }
+   
+function removeFromStorage(targetPost) {
+  let saved = localStorage.getItem(STORAGE_KEY);
+  if (saved) {
+    let posts = JSON.parse(saved);
+    posts = posts.filter(p => p.id !== targetPost.id);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(posts));
+  }
+}
     
 function resetCanvas() {
   window.currentPixels.fill("#ffffff"); 
@@ -193,7 +202,34 @@ function resetCanvas() {
       try { pixelData = JSON.parse(postData.pixels); } catch(e) { return; }
 
       const itemDiv = document.createElement('div');
+      
       itemDiv.classList.add('album-item');
+
+      const delBtn = document.createElement('div');
+      delBtn.textContent = "×";
+      
+     delBtn.style.position = "absolute";
+      delBtn.style.top = "-15px";   
+      delBtn.style.right = "-15px";  
+      
+      delBtn.style.color = "#ccc"; 
+      delBtn.style.fontSize = "20px"; 
+      delBtn.style.cursor = "pointer";
+      delBtn.style.zIndex = "10";
+      delBtn.onmouseover = () => { delBtn.style.color = "#888"; };
+      delBtn.onmouseout  = () => { delBtn.style.color = "#ccc"; };
+
+  
+      delBtn.addEventListener('click', (e) => {
+        e.stopPropagation(); 
+        if (confirm("この絵をアルバムから削除しますか？")) {
+          itemDiv.remove(); 
+          removeFromStorage(postData); 
+        }
+      });
+      itemDiv.appendChild(delBtn);
+
+
       itemDiv.addEventListener('click', () => openModal(postData));
 
       const miniGridDiv = document.createElement('div');
@@ -235,6 +271,53 @@ function resetCanvas() {
     const titleInput = document.getElementById('titleInput');
 
     exchangeBtn.addEventListener('click', async function() {
+      const ngWords = [
+  "しね", "死ね", "殺す", "ころす", "コロス",
+  "自殺", "じさつ", "殺害", "さつがい",
+  "暴力", "ぼうりょく", "テロ", "てろ",
+  "あほ", "阿呆", "アホ",
+  "ばか", "馬鹿", "バカ",
+  "くず", "クズ", "ゴミ", "ごみ", "ゴミクズ",
+  "きもい", "キモい", "ブス", "ぶす", "醜女",
+  "うざい", "ウザい", "消えろ", "きえろ",
+  "ガイジ", "害児", "障がい", "障害", 
+  "えろ", "エロ", "変態", "へんたい",
+  "せっくす", "セックス", "性行為",
+  "ヤリたい", "ちんこ", "ちんちん", "陰茎", "まんこ", "女性器",
+  "おっぱい", "巨乳", "貧乳", "クリトリス",
+  "精子", "せいし", "射精", "自慰", "オナニー",
+  "ソープ", "風俗", "ふうぞく", "援交", "援助交際",
+  "ロリ", "ペド", "近親相姦",
+  "うんこ", "うんち", "糞", "くそ", "クソ",
+  "しっこ", "尿",
+  "麻薬", "覚醒剤", "大麻",
+  "fuck", "fck", "fuk",
+  "shit", "s hit",
+  "bitch", "bich",
+  "asshole", "ass hole",
+  "dick", "cock", "pussy", "cunt",
+  "sex", "sexy",
+  "kill", "die", "death",
+  "suicide",
+  "nigger", "nigga",
+  "faggot", "fag",   
+  "whore", "slut",
+  "rape",
+  "hitler", "nazi"    
+];
+      const titleCheck = titleInput.value || "";
+
+      if (ngWords.some(word => titleCheck.includes(word))) {
+        alert("その言葉はタイトルに使えません！");
+        return; 
+      }
+      const isCanvasWhite = window.currentPixels.every(color => color === '#ffffff');
+      
+      const isTitleEmpty = !titleInput.value || titleInput.value.trim() === "";
+      if (isCanvasWhite && isTitleEmpty) {
+        alert("キャンバスが真っ白で、タイトルもありません\n絵を描くか、タイトルをつけてね。");
+        return; 
+      }
       exchangeBtn.disabled = true;
       exchangeBtn.textContent = "つうしんちゅう...";
 
