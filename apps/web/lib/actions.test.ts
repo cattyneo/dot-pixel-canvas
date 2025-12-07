@@ -15,6 +15,7 @@ vi.mock("next/headers", () => ({
 }));
 
 const validPixels = Array(16).fill("#ff0000");
+const whitespacePixels = Array(16).fill("  #ff0000  ");
 const validFingerprint = "00000000-0000-4000-8000-000000000000";
 
 describe("exchangeArt action", () => {
@@ -85,5 +86,26 @@ describe("exchangeArt action", () => {
         expect(result.success).toBe(true);
         if (!result.success) throw new Error("expected success");
         expect(result.post?.pixels).toEqual(rpcPixels);
+    });
+
+    it("trims pixels before sending to RPC", async () => {
+        rpcMock.mockResolvedValue({
+            data: null,
+            error: null,
+        });
+
+        await exchangeArt({
+            title: "t",
+            pixels: whitespacePixels,
+            fingerprint: validFingerprint,
+            workSeconds: 10,
+        });
+
+        expect(rpcMock).toHaveBeenCalledWith(
+            "exchange_art",
+            expect.objectContaining({
+                new_pixels: Array(16).fill("#ff0000"),
+            })
+        );
     });
 });

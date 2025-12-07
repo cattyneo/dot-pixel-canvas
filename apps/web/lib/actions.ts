@@ -18,7 +18,10 @@ function getSupabaseConfig() {
     return { url, serviceKey };
 }
 
-const hexColorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/, "無効な色が含まれています");
+const hexColorSchema = z
+    .string()
+    .trim()
+    .regex(/^#[0-9a-fA-F]{6}$/, "無効な色が含まれています");
 
 const exchangeArtSchema = z.object({
     title: z.string().max(5, "タイトルは5文字以内です").optional(),
@@ -105,9 +108,10 @@ export async function exchangeArt(input: {
     }
 
     const parsed = validation.data;
+    const sanitizedPixels = parsed.pixels.map((c) => c.trim());
     const sanitizedTitle = sanitizeTitle(parsed.title);
 
-    if (isAllWhiteCanvas(parsed.pixels) && sanitizedTitle === "むだい") {
+    if (isAllWhiteCanvas(sanitizedPixels) && sanitizedTitle === "むだい") {
         return {
             success: false,
             error: "キャンバスが真っ白で、タイトルもありません",
@@ -121,7 +125,7 @@ export async function exchangeArt(input: {
     try {
         const { data, error } = await supabase.rpc("exchange_art", {
             new_title: sanitizedTitle,
-            new_pixels: parsed.pixels,
+            new_pixels: sanitizedPixels,
             client_fingerprint: parsed.fingerprint,
             client_ip: clientIp,
             work_seconds: parsed.workSeconds ?? 0,
