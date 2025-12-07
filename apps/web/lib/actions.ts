@@ -1,5 +1,6 @@
 "use server";
 
+import { headers } from "next/headers";
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import type { Post } from "@/types";
@@ -17,18 +18,88 @@ function getSupabaseConfig() {
     return { url, serviceKey };
 }
 
+const hexColorSchema = z
+    .string()
+    .trim()
+    .regex(/^#[0-9a-fA-F]{6}$/, "無効な色が含まれています");
+
 const exchangeArtSchema = z.object({
-    title: z.string().max(5, "タイトルは5文字以内です"),
-    pixels: z.array(z.string()).length(16, "16色の配列が必要です"),
+    title: z.string().max(5, "タイトルは5文字以内です").optional(),
+    pixels: z.array(hexColorSchema).length(16, "16色の配列が必要です"),
+    fingerprint: z
+        .string()
+        .regex(
+            /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+            "fingerprintが不正です"
+        ),
+    workSeconds: z.number().int().min(0).max(3600).optional(),
 });
 
 export type ExchangeResult =
-    | { success: true; post: Post | null; message: string }
+    | { success: true; post: Post | null; message: string; duplicate?: boolean }
     | { success: false; error: string };
 
-export async function exchangeArt(title: string, pixels: string[]): Promise<ExchangeResult> {
-    // Validate input
-    const validation = exchangeArtSchema.safeParse({ title, pixels });
+const sanitizeTitle = (title?: string) => {
+    const cleaned = (title ?? "").replace(/\p{C}/gu, "");
+    const trimmed = cleaned.trim();
+    return trimmed === "" ? "むだい" : trimmed;
+};
+
+const isAllWhiteCanvas = (pixels: string[]) =>
+    pixels.every((color) => color.toLowerCase() === "#ffffff");
+
+async function getClientIp(): Promise<string | null> {
+    try {
+        const forwardedHeaders = await headers();
+        const forwarded = forwardedHeaders.get("x-forwarded-for");
+        if (!forwarded) return null;
+        return forwarded.split(",")[0]?.trim() || null;
+    } catch {
+        return null;
+    }
+}
+
+function normalizePixels(value: unknown): string[] {
+    if (Array.isArray(value)) {
+        return value as string[];
+    }
+
+    if (typeof value === "string") {
+        try {
+            const parsed = JSON.parse(value);
+            if (Array.isArray(parsed)) {
+                return parsed as string[];
+            }
+        } catch {
+            // fall through
+        }
+    }
+
+    return [];
+}
+
+function normalizePost(data: any): Post {
+    return {
+        id: data.id,
+        title: data.title,
+        pixels: normalizePixels(data.pixels),
+        created_at: data.created_at,
+    };
+}
+
+export async function exchangeArt(input: {
+    title: string;
+    pixels: string[];
+    fingerprint: string;
+    workSeconds?: number;
+}): Promise<ExchangeResult> {
+    const validation = exchangeArtSchema.safeParse({
+        title: input.title,
+        pixels: input.pixels,
+        fingerprint: input.fingerprint,
+        workSeconds: input.workSeconds ?? 0,
+    });
+
     if (!validation.success) {
         return {
             success: false,
@@ -36,39 +107,52 @@ export async function exchangeArt(title: string, pixels: string[]): Promise<Exch
         };
     }
 
-    // Check if canvas is all white and title is empty
-    const isCanvasWhite = pixels.every((color) => color === "#ffffff");
-    const isTitleEmpty = !title || title.trim() === "";
+    const parsed = validation.data;
+    const sanitizedPixels = parsed.pixels.map((c) => c.trim());
+    const sanitizedTitle = sanitizeTitle(parsed.title);
 
-    if (isCanvasWhite && isTitleEmpty) {
+    if (isAllWhiteCanvas(sanitizedPixels) && sanitizedTitle === "むだい") {
         return {
             success: false,
-            error: "キャンバスが真っ白で、タイトルもありません。絵を描くか、タイトルをつけてね。",
+            error: "キャンバスが真っ白で、タイトルもありません",
         };
     }
 
     const { url, serviceKey } = getSupabaseConfig();
     const supabase = createClient(url, serviceKey);
-    const finalTitle = title.trim() || "むだい";
+    const clientIp = await getClientIp();
 
     try {
         const { data, error } = await supabase.rpc("exchange_art", {
-            new_title: finalTitle,
-            new_pixels: pixels,
+            new_title: sanitizedTitle,
+            new_pixels: sanitizedPixels,
+            client_fingerprint: parsed.fingerprint,
+            client_ip: clientIp,
+            work_seconds: parsed.workSeconds ?? 0,
         });
 
         if (error) {
-            console.error("Supabase RPC error:", error);
             return {
                 success: false,
                 error: `エラー: ${error.message}`,
             };
         }
 
-        if (data) {
+        if (data?.duplicate) {
+            const post = normalizePost(data);
             return {
                 success: true,
-                post: data as Post,
+                duplicate: true,
+                post,
+                message: "他の人が作成済みです。アルバムに保存しますか？",
+            };
+        }
+
+        if (data) {
+            const post = normalizePost(data);
+            return {
+                success: true,
+                post,
                 message: "あなたの元に新しい絵がやってきました",
             };
         }
@@ -80,7 +164,6 @@ export async function exchangeArt(title: string, pixels: string[]): Promise<Exch
                 "投稿ありがとう！交換相手がいなかったので、あなたの絵は誰かが来るまで保管されます",
         };
     } catch (e) {
-        console.error("Exchange error:", e);
         return {
             success: false,
             error: "通信エラーが発生しました",

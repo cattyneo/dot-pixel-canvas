@@ -33,11 +33,16 @@ function ModalComponent({ post, onClose }: ModalProps) {
 
     const pixels = useMemo(() => {
         if (!post) return [];
+        if (Array.isArray(post.pixels)) return post.pixels;
         try {
-            return JSON.parse(post.pixels) as string[];
+            const parsed = JSON.parse(post.pixels as unknown as string);
+            if (Array.isArray(parsed)) {
+                return parsed as string[];
+            }
         } catch {
-            return Array(16).fill("#cccccc");
+            // ignore
         }
+        return Array(16).fill("#cccccc");
     }, [post?.pixels]);
 
     if (!post) return null;

@@ -1,12 +1,15 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
+import type { ChangeEvent } from "react";
 import { Canvas } from "./Canvas";
 import { ColorPicker } from "./ColorPicker";
 import { Album } from "./Album";
 import { Modal } from "./Modal";
 import { useAlbum } from "@/hooks/useAlbum";
+import { useWorkTime } from "@/hooks/useWorkTime";
 import { exchangeArt } from "@/lib/actions";
+import { getFingerprint } from "@/lib/fingerprint";
 import type { Post } from "@/types";
 
 const INITIAL_PIXELS = Array(16).fill("#ffffff");
@@ -16,43 +19,66 @@ export function PixelDiary() {
     const [pixels, setPixels] = useState<string[]>(INITIAL_PIXELS);
     const [currentColor, setCurrentColor] = useState(DEFAULT_COLOR);
     const [title, setTitle] = useState("");
+    const [fingerprint, setFingerprint] = useState("");
     const [isExchanging, setIsExchanging] = useState(false);
     const [selectedPost, setSelectedPost] = useState<Post | null>(null);
 
     const { posts, addPost, removePost } = useAlbum();
+    const { markActive, finalize, reset: resetWork } = useWorkTime(60);
+
+    useEffect(() => {
+        setFingerprint(getFingerprint());
+    }, []);
 
     const handlePixelClick = useCallback(
         (index: number) => {
+            markActive();
             setPixels((prev) => {
                 const newPixels = [...prev];
                 newPixels[index] = currentColor;
                 return newPixels;
             });
         },
-        [currentColor]
+        [currentColor, markActive]
     );
 
     const resetCanvas = useCallback(() => {
         setPixels(INITIAL_PIXELS);
         setTitle("");
-    }, []);
+        resetWork();
+    }, [resetWork]);
 
     const handleExchange = useCallback(async () => {
         setIsExchanging(true);
 
         try {
-            const result = await exchangeArt(title, pixels);
+            const workSeconds = finalize();
+            const fp = fingerprint || getFingerprint();
+
+            const result = await exchangeArt({
+                title,
+                pixels,
+                fingerprint: fp,
+                workSeconds,
+            });
 
             if (!result.success) {
                 alert(result.error);
                 return;
             }
 
-            if (result.post) {
-                addPost(result.post);
+            if (result.duplicate && result.post) {
+                const shouldSave = confirm(result.message);
+                if (shouldSave) {
+                    addPost(result.post);
+                }
+            } else {
+                if (result.post) {
+                    addPost(result.post);
+                }
+                alert(result.message);
             }
 
-            alert(result.message);
             resetCanvas();
         } catch (error) {
             console.error("Exchange error:", error);
@@ -60,7 +86,7 @@ export function PixelDiary() {
         } finally {
             setIsExchanging(false);
         }
-    }, [title, pixels, addPost, resetCanvas]);
+    }, [title, pixels, addPost, finalize, fingerprint, resetCanvas]);
 
     const handleViewPost = useCallback((post: Post) => {
         setSelectedPost(post);
@@ -77,6 +103,22 @@ export function PixelDiary() {
         [removePost]
     );
 
+    const handleTitleChange = useCallback(
+        (e: ChangeEvent<HTMLInputElement>) => {
+            markActive();
+            setTitle(e.target.value);
+        },
+        [markActive]
+    );
+
+    const handleColorChange = useCallback(
+        (value: string) => {
+            markActive();
+            setCurrentColor(value);
+        },
+        [markActive]
+    );
+
     return (
         <>
             <div className="bg-container-bg border-border mb-10 w-[300px] border-[3px] p-6 text-center">
@@ -90,12 +132,12 @@ export function PixelDiary() {
                     onPixelClick={handlePixelClick}
                 />
 
-                <ColorPicker color={currentColor} onChange={setCurrentColor} />
+                <ColorPicker color={currentColor} onChange={handleColorChange} />
 
                 <input
                     type="text"
                     value={title}
-                    onChange={(e) => setTitle(e.target.value)}
+                    onChange={handleTitleChange}
                     placeholder="タイトル(5もじまで)"
                     maxLength={5}
                     className="font-pixel border-border mb-[15px] w-[180px] border-[3px] bg-[#f9f9f9] p-2 text-center text-base outline-none"

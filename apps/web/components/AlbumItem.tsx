@@ -16,11 +16,18 @@ function AlbumItemComponent({ post, onView, onDelete }: AlbumItemProps) {
     }, [post.created_at]);
 
     const pixels = useMemo(() => {
-        try {
-            return JSON.parse(post.pixels) as string[];
-        } catch {
-            return Array(16).fill("#cccccc");
+        if (Array.isArray(post.pixels)) {
+            return post.pixels;
         }
+        try {
+            const parsed = JSON.parse(post.pixels as unknown as string);
+            if (Array.isArray(parsed)) {
+                return parsed as string[];
+            }
+        } catch {
+            // ignore
+        }
+        return Array(16).fill("#cccccc");
     }, [post.pixels]);
 
     const handleDelete = (e: React.MouseEvent) => {
