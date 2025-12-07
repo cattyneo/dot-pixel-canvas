@@ -34,8 +34,22 @@ coverage
 playwright-report
 test-results
 
-# Supabase
+# Supabase local
 packages/supabase/.temp
+packages/supabase/.branches
 
-# Misc
+# Turborepo cache
+.turbo
+.cache
+
+# TypeScript
 *.tsbuildinfo
+
+# SpecStory
+.specstory
+
+# Vercel
+.vercel
+
+# Cursor
+.cursor

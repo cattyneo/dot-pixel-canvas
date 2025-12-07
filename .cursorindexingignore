@@ -1,3 +1,29 @@
+# Dependencies
+node_modules
+.pnpm-store
 
-# Don't index SpecStory auto-save files, but allow explicit context inclusion via @ references
-.specstory/**
+# Build outputs
+.next
+.turbo
+dist
+out
+
+# SpecStory auto-save files
+.specstory
+
+# Lock files
+pnpm-lock.yaml
+package-lock.json
+yarn.lock
+
+# Supabase local state
+packages/supabase/.temp
+packages/supabase/.branches
+
+# IDE/Editor
+.vscode
+.idea
+
+# Cache
+.cache
+*.tsbuildinfo
