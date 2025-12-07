@@ -27,3 +27,5 @@ packages/supabase/.branches
 # Cache
 .cache
 *.tsbuildinfo
+# Don't index SpecStory auto-save files, but allow explicit context inclusion via @ references
+.specstory/**
