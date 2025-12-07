@@ -5,16 +5,16 @@ import { z } from "zod";
 import type { Post } from "@/types";
 
 function getSupabaseConfig() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-  if (!url || !serviceKey) {
-    throw new Error(
-      "Missing required environment variables: NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY"
-    );
-  }
+    if (!url || !serviceKey) {
+        throw new Error(
+            "Missing required environment variables: NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY"
+        );
+    }
 
-  return { url, serviceKey };
+    return { url, serviceKey };
 }
 
 const exchangeArtSchema = z.object({
@@ -26,10 +26,7 @@ export type ExchangeResult =
     | { success: true; post: Post | null; message: string }
     | { success: false; error: string };
 
-export async function exchangeArt(
-    title: string,
-    pixels: string[]
-): Promise<ExchangeResult> {
+export async function exchangeArt(title: string, pixels: string[]): Promise<ExchangeResult> {
     // Validate input
     const validation = exchangeArtSchema.safeParse({ title, pixels });
     if (!validation.success) {
@@ -79,7 +76,8 @@ export async function exchangeArt(
         return {
             success: true,
             post: null,
-            message: "投稿ありがとう！交換相手がいなかったので、あなたの絵は誰かが来るまで保管されます",
+            message:
+                "投稿ありがとう！交換相手がいなかったので、あなたの絵は誰かが来るまで保管されます",
         };
     } catch (e) {
         console.error("Exchange error:", e);

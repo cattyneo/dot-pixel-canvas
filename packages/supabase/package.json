@@ -1,16 +1,16 @@
 {
-  "name": "@dot-pixel-canvas/supabase",
-  "version": "0.0.0",
-  "private": true,
-  "scripts": {
-    "start": "supabase start",
-    "stop": "supabase stop",
-    "status": "supabase status",
-    "migrate": "supabase db push",
-    "reset": "supabase db reset",
-    "gen:types": "supabase gen types typescript --local > types.ts"
-  },
-  "devDependencies": {
-    "supabase": "^2.19.7"
-  }
+    "name": "@dot-pixel-canvas/supabase",
+    "version": "0.0.0",
+    "private": true,
+    "scripts": {
+        "start": "supabase start",
+        "stop": "supabase stop",
+        "status": "supabase status",
+        "migrate": "supabase db push",
+        "reset": "supabase db reset",
+        "gen:types": "supabase gen types typescript --local > types.ts"
+    },
+    "devDependencies": {
+        "supabase": "^2.19.7"
+    }
 }

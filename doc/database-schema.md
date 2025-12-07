@@ -8,19 +8,19 @@ Supabase（PostgreSQL）を使用。匿名ユーザーによる絵の投稿・�
 
 ### posts テーブル
 
-| カラム | 型 | NULL | デフォルト | 説明 |
-|--------|-----|------|------------|------|
-| id | UUID | NO | gen_random_uuid() | PK |
-| title | TEXT | NO | - | タイトル（5文字以内、絵文字許可、特殊文字不可） |
-| pixels | JSONB | NO | - | 16色HEX配列 |
-| is_exchanged | BOOLEAN | NO | FALSE | 交換済みフラグ |
-| created_at | TIMESTAMPTZ | NO | NOW() | 作成日時 |
-| user_id | UUID | YES | NULL | 認証ユーザーID |
-| ip_address | INET | YES | NULL | 不正対策用 |
-| fingerprint | TEXT | YES | NULL | 匿名ユーザー識別（UUID v4形式） |
-| work_seconds | INT | NO | 0 | 作業時間（秒）。分析・表示用 |
-| likes_count | INT | NO | 0 | いいね数 |
-| report_count | INT | NO | 0 | 通報数 |
+| カラム       | 型          | NULL | デフォルト        | 説明                                            |
+| ------------ | ----------- | ---- | ----------------- | ----------------------------------------------- |
+| id           | UUID        | NO   | gen_random_uuid() | PK                                              |
+| title        | TEXT        | NO   | -                 | タイトル（5文字以内、絵文字許可、特殊文字不可） |
+| pixels       | JSONB       | NO   | -                 | 16色HEX配列                                     |
+| is_exchanged | BOOLEAN     | NO   | FALSE             | 交換済みフラグ                                  |
+| created_at   | TIMESTAMPTZ | NO   | NOW()             | 作成日時                                        |
+| user_id      | UUID        | YES  | NULL              | 認証ユーザーID                                  |
+| ip_address   | INET        | YES  | NULL              | 不正対策用                                      |
+| fingerprint  | TEXT        | YES  | NULL              | 匿名ユーザー識別（UUID v4形式）                 |
+| work_seconds | INT         | NO   | 0                 | 作業時間（秒）。分析・表示用                    |
+| likes_count  | INT         | NO   | 0                 | いいね数                                        |
+| report_count | INT         | NO   | 0                 | 通報数                                          |
 
 #### 制約
 
@@ -29,12 +29,12 @@ Supabase（PostgreSQL）を使用。匿名ユーザーによる絵の投稿・�
 
 #### インデックス
 
-| 名前 | 対象 | 用途 |
-|------|------|------|
+| 名前                   | 対象                | 用途               |
+| ---------------------- | ------------------- | ------------------ |
 | idx_posts_is_exchanged | is_exchanged (部分) | 未交換絵の高速検索 |
-| idx_posts_created_at | created_at DESC | 日時順ソート |
-| idx_posts_fingerprint | fingerprint | 自己投稿除外検索 |
-| idx_posts_pixels | pixels (HASH) | 同一盤面チェック |
+| idx_posts_created_at   | created_at DESC     | 日時順ソート       |
+| idx_posts_fingerprint  | fingerprint         | 自己投稿除外検索   |
+| idx_posts_pixels       | pixels (HASH)       | 同一盤面チェック   |
 
 #### pixels フォーマット
 
@@ -56,8 +56,8 @@ Supabase（PostgreSQL）を使用。匿名ユーザーによる絵の投稿・�
 
 ### ポリシー
 
-| 操作 | 条件 |
-|------|------|
+| 操作   | 条件                     |
+| ------ | ------------------------ |
 | SELECT | is_exchanged = TRUE のみ |
 
 ## ER図
@@ -112,11 +112,11 @@ Receives B's art         Receives A's art
 
 ## マイグレーション
 
-| ファイル | 内容 |
-|----------|------|
-| 20241207000001_create_posts.sql | テーブル、インデックス、RLS |
-| 20241207000002_create_exchange_art_function.sql | RPC関数 |
-| （Phase 1で追加予定） | カラム追加、RPC関数更新 |
+| ファイル                                        | 内容                        |
+| ----------------------------------------------- | --------------------------- |
+| 20241207000001_create_posts.sql                 | テーブル、インデックス、RLS |
+| 20241207000002_create_exchange_art_function.sql | RPC関数                     |
+| （Phase 1で追加予定）                           | カラム追加、RPC関数更新     |
 
 ## パフォーマンス考慮
 
@@ -130,30 +130,30 @@ Receives B's art         Receives A's art
 
 ### likes テーブル
 
-| カラム | 型 | 説明 |
-|--------|-----|------|
-| id | UUID | PK |
-| user_id | UUID | FK → auth.users |
-| post_id | UUID | FK → posts |
-| created_at | TIMESTAMPTZ | 作成日時 |
+| カラム     | 型          | 説明            |
+| ---------- | ----------- | --------------- |
+| id         | UUID        | PK              |
+| user_id    | UUID        | FK → auth.users |
+| post_id    | UUID        | FK → posts      |
+| created_at | TIMESTAMPTZ | 作成日時        |
 
 UNIQUE(user_id, post_id)
 
 ### reports テーブル
 
-| カラム | 型 | 説明 |
-|--------|-----|------|
-| id | UUID | PK |
-| reporter_id | UUID | FK → auth.users |
-| post_id | UUID | FK → posts |
-| reason | TEXT | 通報理由 |
-| created_at | TIMESTAMPTZ | 作成日時 |
+| カラム      | 型          | 説明            |
+| ----------- | ----------- | --------------- |
+| id          | UUID        | PK              |
+| reporter_id | UUID        | FK → auth.users |
+| post_id     | UUID        | FK → posts      |
+| reason      | TEXT        | 通報理由        |
+| created_at  | TIMESTAMPTZ | 作成日時        |
 
 ### banned_users テーブル
 
-| カラム | 型 | 説明 |
-|--------|-----|------|
-| user_id | UUID | PK, FK → auth.users |
-| reason | TEXT | BAN理由 |
-| banned_at | TIMESTAMPTZ | BAN日時 |
-| expires_at | TIMESTAMPTZ | 解除日時 |
+| カラム     | 型          | 説明                |
+| ---------- | ----------- | ------------------- |
+| user_id    | UUID        | PK, FK → auth.users |
+| reason     | TEXT        | BAN理由             |
+| banned_at  | TIMESTAMPTZ | BAN日時             |
+| expires_at | TIMESTAMPTZ | 解除日時            |

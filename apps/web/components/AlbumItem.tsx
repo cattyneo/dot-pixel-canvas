@@ -4,68 +4,64 @@ import { memo, useMemo } from "react";
 import type { Post } from "@/types";
 
 interface AlbumItemProps {
-  post: Post;
-  onView: (post: Post) => void;
-  onDelete: (postId: string) => void;
+    post: Post;
+    onView: (post: Post) => void;
+    onDelete: (postId: string) => void;
 }
 
 function AlbumItemComponent({ post, onView, onDelete }: AlbumItemProps) {
-  const dateString = useMemo(() => {
-    const date = new Date(post.created_at);
-    return `${(date.getMonth() + 1).toString().padStart(2, "0")}/${date.getDate().toString().padStart(2, "0")}`;
-  }, [post.created_at]);
+    const dateString = useMemo(() => {
+        const date = new Date(post.created_at);
+        return `${(date.getMonth() + 1).toString().padStart(2, "0")}/${date.getDate().toString().padStart(2, "0")}`;
+    }, [post.created_at]);
 
-  const pixels = useMemo(() => {
-    try {
-      return JSON.parse(post.pixels) as string[];
-    } catch {
-      return Array(16).fill("#cccccc");
-    }
-  }, [post.pixels]);
+    const pixels = useMemo(() => {
+        try {
+            return JSON.parse(post.pixels) as string[];
+        } catch {
+            return Array(16).fill("#cccccc");
+        }
+    }, [post.pixels]);
 
-  const handleDelete = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (confirm("この絵をアルバムから削除しますか？")) {
-      onDelete(post.id);
-    }
-  };
+    const handleDelete = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (confirm("この絵をアルバムから削除しますか？")) {
+            onDelete(post.id);
+        }
+    };
 
-  return (
-    <div
-      className="bg-white p-[10px] border-[3px] border-border cursor-pointer transition-transform hover:scale-105 animate-fadeIn relative"
-      onClick={() => onView(post)}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => e.key === "Enter" && onView(post)}
-      aria-label={`${post.title} - ${dateString}`}
-    >
-      <button
-        type="button"
-        onClick={handleDelete}
-        className="absolute -top-[15px] -right-[15px] w-10 h-10 leading-10 text-center text-[#888] text-xl cursor-pointer z-10 hover:text-border"
-        aria-label="削除"
-      >
-        ×
-      </button>
+    return (
+        <div
+            className="border-border animate-fadeIn relative cursor-pointer border-[3px] bg-white p-[10px] transition-transform hover:scale-105"
+            onClick={() => onView(post)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => e.key === "Enter" && onView(post)}
+            aria-label={`${post.title} - ${dateString}`}
+        >
+            <button
+                type="button"
+                onClick={handleDelete}
+                className="hover:text-border absolute -right-[15px] -top-[15px] z-10 h-10 w-10 cursor-pointer text-center text-xl leading-10 text-[#888]"
+                aria-label="削除"
+            >
+                ×
+            </button>
 
-      <div className="grid grid-cols-4 gap-[1px] w-20 h-20 bg-border border-2 border-border mb-2 p-[1px]">
-        {pixels.map((color, index) => (
-          <div
-            key={index}
-            className="w-full h-full"
-            style={{ backgroundColor: typeof color === "string" ? color : "#cccccc" }}
-          />
-        ))}
-      </div>
+            <div className="bg-border border-border mb-2 grid h-20 w-20 grid-cols-4 gap-[1px] border-2 p-[1px]">
+                {pixels.map((color, index) => (
+                    <div
+                        key={index}
+                        className="h-full w-full"
+                        style={{ backgroundColor: typeof color === "string" ? color : "#cccccc" }}
+                    />
+                ))}
+            </div>
 
-      <div className="text-xs text-center text-border font-bold font-pixel">
-        {post.title}
-      </div>
-      <div className="text-[10px] text-center text-[#666] font-pixel">
-        {dateString}
-      </div>
-    </div>
-  );
+            <div className="text-border font-pixel text-center text-xs font-bold">{post.title}</div>
+            <div className="font-pixel text-center text-[10px] text-[#666]">{dateString}</div>
+        </div>
+    );
 }
 
 export const AlbumItem = memo(AlbumItemComponent);

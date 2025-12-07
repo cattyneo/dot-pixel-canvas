@@ -11,21 +11,23 @@
 
 **優先度**: 高
 **効果**: パフォーマンス向上
-**現状**: 
+**現状**:
+
 ```typescript
 // 毎回新しいインスタンスを生成
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 ```
 
 **改善案**:
+
 ```typescript
 let supabaseInstance: ReturnType<typeof createClient> | null = null;
 
 function getSupabaseClient() {
-  if (!supabaseInstance) {
-    supabaseInstance = createClient(supabaseUrl, supabaseServiceKey);
-  }
-  return supabaseInstance;
+    if (!supabaseInstance) {
+        supabaseInstance = createClient(supabaseUrl, supabaseServiceKey);
+    }
+    return supabaseInstance;
 }
 ```
 
@@ -39,13 +41,15 @@ function getSupabaseClient() {
 **効果**: レスポンス向上、ピクセルアートらしい即時反映
 
 **現状**:
+
 ```typescript
-className="... transition-colors hover:opacity-80"
+className = "... transition-colors hover:opacity-80";
 ```
 
 **改善案**:
+
 ```typescript
-className="... hover:opacity-80"
+className = "... hover:opacity-80";
 ```
 
 **理由**: ピクセルアートは色が即座に変わる方が自然
@@ -60,6 +64,7 @@ className="... hover:opacity-80"
 **現状**: Canvasコンポーネント全体がmemo化されているが、内部のピクセルは個別にmemo化されていない
 
 **改善案**:
+
 ```typescript
 const Pixel = memo(({ color, index, onClick }: PixelProps) => (
   <button
@@ -85,6 +90,7 @@ const Pixel = memo(({ color, index, onClick }: PixelProps) => (
 **現状**: `useAlbum` フックで `isLoaded` を返しているが未使用
 
 **改善案**:
+
 ```typescript
 const { posts, isLoaded } = useAlbum();
 
@@ -113,18 +119,23 @@ if (!isLoaded) {
 **優先度**: 低
 **効果**: 微小なパフォーマンス向上
 
-**現状**: 
+**現状**:
+
 ```typescript
 const handleDelete = (e: React.MouseEvent) => {
-  // ...
+    // ...
 };
 ```
 
 **改善案**:
+
 ```typescript
-const handleDelete = useCallback((e: React.MouseEvent) => {
-  // ...
-}, [onDelete, post.id]);
+const handleDelete = useCallback(
+    (e: React.MouseEvent) => {
+        // ...
+    },
+    [onDelete, post.id]
+);
 ```
 
 ---
@@ -157,4 +168,3 @@ const handleDelete = useCallback((e: React.MouseEvent) => {
 - [要件定義書](./requirements.md)
 - [データベース設計書](./database-schema.md)
 - [API仕様書](./api-spec.md)
-

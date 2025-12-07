@@ -18,13 +18,13 @@
 
 ## 技術スタック
 
-| カテゴリ | 技術 |
-|---------|------|
+| カテゴリ | 技術                                           |
+| -------- | ---------------------------------------------- |
 | Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS |
-| Backend | Supabase (PostgreSQL, RLS, RPC) |
-| Monorepo | Turborepo, pnpm |
-| Testing | Vitest, Playwright |
-| Deploy | Vercel (Web), Supabase Cloud (DB) |
+| Backend  | Supabase (PostgreSQL, RLS, RPC)                |
+| Monorepo | Turborepo, pnpm                                |
+| Testing  | Vitest, Playwright                             |
+| Deploy   | Vercel (Web), Supabase Cloud (DB)              |
 
 ## ドキュメント
 
@@ -57,6 +57,7 @@ pnpm supabase:migrate
 ### 環境変数
 
 `.env.local` を作成:
+
 - NEXT_PUBLIC_SUPABASE_URL
 - NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
 - SUPABASE_SERVICE_ROLE_KEY
