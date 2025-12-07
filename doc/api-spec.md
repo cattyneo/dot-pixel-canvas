@@ -89,6 +89,7 @@ exchange_art(
 | 22023    | Empty canvas with no title           | 全白+タイトル空     |
 | 22023    | Title contains inappropriate words   | NGワード検出        |
 | 22023    | Title contains invalid characters    | 特殊文字検出        |
+| 42501    | Rate limit exceeded                  | レートリミット超過  |
 
 ## セキュリティ
 
@@ -100,14 +101,14 @@ exchange_art(
 
 ### Rate Limiting
 
-Vercel Edge Middlewareで実装（@upstash/ratelimit + Redis）
+RPC内でposts履歴を参照して実装（外部Redis不要）
 
 | 制限 | 値              | 目的             |
 | ---- | --------------- | ---------------- |
 | 短期 | 3 posts/20sec   | バースト防止     |
 | 長期 | 20 posts/300sec | 持続的な乱用防止 |
 
-超過時: `429 Too Many Requests`
+超過時: SQLSTATE `42501` (rate_limit_exceeded)
 
 ### NGワード
 

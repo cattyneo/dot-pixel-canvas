@@ -1,7 +1,7 @@
 export interface Post {
     id: string;
     title: string;
-    pixels: string; // JSON string of 16 hex colors
+    pixels: string[]; // 16 hex colors
     created_at: string;
 }
 

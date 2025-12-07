@@ -139,7 +139,7 @@
     - fingerprint検証（UUID v4形式）
     - 全白+タイトル空の拒否
     - NGワードチェック（部分一致、大文字小文字無視）
-- レートリミット（Vercel Edge Middleware）
+- レートリミット（RPC内でDB履歴を参照）
     - 短期: 3 posts/20sec
     - 長期: 20 posts/300sec
 
