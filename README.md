@@ -31,6 +31,7 @@
 - [要件定義書](doc/requirements.md) - 機能要件・非機能要件・ユーザーフロー
 - [データベース設計書](doc/database-schema.md) - テーブル設計・RLSポリシー
 - [API仕様書](doc/api-spec.md) - RPC関数仕様
+- [改修ロードマップ](doc/improvement-plans.md) - Phase別開発計画
 
 ## セットアップ
 
@@ -56,11 +57,9 @@ pnpm supabase:migrate
 ### 環境変数
 
 `.env.local` を作成:
-
-```env
-NEXT_PUBLIC_SUPABASE_URL=http://localhost:54321
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-local-anon-key
-```
+- NEXT_PUBLIC_SUPABASE_URL
+- NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+- SUPABASE_SERVICE_ROLE_KEY
 
 ## 開発
 
@@ -106,7 +105,3 @@ vercel
 # Supabase CLIでデプロイ
 supabase db push
 ```
-
-## ライセンス
-
-MIT

@@ -3,7 +3,13 @@
 ## 概要
 
 Supabase RPC（Remote Procedure Call）を使用したサーバーサイドAPI。
-クライアントから直接呼び出し可能な関数を提供。
+
+## アーキテクチャ
+
+```
+Client → Edge Middleware → Server Actions → RPC関数 → DB
+         (レートリミット)   (入口/fingerprint取得)  (ビジネスロジック)
+```
 
 ## RPC関数
 
@@ -11,240 +17,107 @@ Supabase RPC（Remote Procedure Call）を使用したサーバーサイドAPI�
 
 絵を投稿し、他のユーザーの絵と交換する。
 
-#### 関数シグネチャ
+#### シグネチャ
 
-```sql
-CREATE OR REPLACE FUNCTION exchange_art(
+```
+exchange_art(
   new_title TEXT,
-  new_pixels JSONB
+  new_pixels JSONB,
+  client_fingerprint TEXT,
+  client_ip INET,
+  work_seconds INT DEFAULT 0
 ) RETURNS JSONB
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
 ```
 
 #### パラメータ
 
 | パラメータ | 型 | 必須 | 説明 |
 |-----------|-----|------|------|
-| new_title | TEXT | YES | 投稿する絵のタイトル（5文字以内） |
-| new_pixels | JSONB | YES | 16色の配列（JSON文字列） |
+| new_title | TEXT | YES | タイトル（5文字以内、トリム済み、特殊文字除去済み） |
+| new_pixels | JSONB | YES | 16色のHEX配列 |
+| client_fingerprint | TEXT | YES | UUID v4形式（`/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i`） |
+| client_ip | INET | NO | クライアントIP（Server Actions経由で取得） |
+| work_seconds | INT | NO | 作業時間（秒）。MIN(5)未満→0、MAX(3600)超→クリップ |
 
 #### 戻り値
 
-成功時（交換相手あり）:
-```json
-{
-  "id": "550e8400-e29b-41d4-a716-446655440000",
-  "title": "ねこ",
-  "pixels": "[\"#ffffff\", \"#ffb7b2\", ...]",
-  "created_at": "2024-01-15T10:30:00.000Z"
-}
-```
+| ケース | 戻り値 |
+|--------|--------|
+| 交換成功 | `{ id, title, pixels, created_at }` |
+| 交換待ち | `null` |
+| 同一盤面 | `{ duplicate: true, id, title, pixels, created_at }` ※既存の同一盤面の絵データ |
+| エラー | 例外発生（SQLSTATE） |
 
-成功時（交換相手なし）:
-```json
-null
-```
-
-エラー時:
-```json
-{
-  "error": "エラーメッセージ"
-}
-```
+**注意**:
+- `pixels`フィールドはJSON文字列として返却される。Server Actions層でパースして型を統一する。
+- 同一盤面の場合、投稿者の絵は**DBに保存されない**。
 
 #### 処理フロー
 
-```
-1. 入力バリデーション
-   - new_title: 5文字以内
-   - new_pixels: 16要素の配列
+1. **入力バリデーション**
+   - タイトル: 5文字以内、トリム、特殊文字除去（絵文字は許可）
+   - pixels: 16要素の配列
+   - 各pixel: 有効なHEX形式（`/^#[0-9a-fA-F]{6}$/`）
+   - fingerprint: UUID v4形式
+   - work_seconds: 5未満→0、3600超→3600にクリップ
+   - 全白 かつ タイトル空 → 拒否
+   - NGワード → 拒否（部分一致、大文字小文字無視）
 
-2. 新しい絵を投稿
-   INSERT INTO posts (title, pixels, is_exchanged)
-   VALUES (new_title, new_pixels, FALSE)
-   RETURNING id INTO new_post_id
+2. **同一盤面チェック**
+   - 既存postsと同じpixels配列が存在 → 投稿せずduplicate応答（既存データを返却）
 
-3. 交換相手を検索（ランダム選択）
-   SELECT * FROM posts
-   WHERE is_exchanged = FALSE
-     AND id != new_post_id
-   ORDER BY RANDOM()
-   LIMIT 1
-   FOR UPDATE SKIP LOCKED
+3. **投稿登録**
+   - postsテーブルにINSERT（is_exchanged=FALSE, fingerprint, ip_address, work_seconds）
 
-4. 交換相手が見つかった場合
-   - 選択した絵を is_exchanged = TRUE に更新
-   - 選択した絵のデータを返却
+4. **交換相手検索**
+   - 条件: is_exchanged=FALSE AND id≠自分 AND fingerprint≠自分（過去投稿すべて除外）
+   - ORDER BY RANDOM() LIMIT 1 FOR UPDATE SKIP LOCKED
 
-5. 交換相手が見つからなかった場合
-   - NULL を返却
-```
+5. **交換処理**
+   - 相手あり: is_exchanged=TRUEに更新、相手のデータを返却
+   - 相手なし: NULLを返却
 
-#### 実装コード
+#### エラーコード
 
-```sql
-CREATE OR REPLACE FUNCTION exchange_art(
-  new_title TEXT,
-  new_pixels JSONB
-) RETURNS JSONB
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-  new_post_id UUID;
-  exchanged_post RECORD;
-  result JSONB;
-BEGIN
-  -- 入力バリデーション
-  IF char_length(new_title) > 5 THEN
-    RAISE EXCEPTION 'Title must be 5 characters or less';
-  END IF;
-  
-  IF jsonb_typeof(new_pixels) != 'array' OR jsonb_array_length(new_pixels) != 16 THEN
-    RAISE EXCEPTION 'Pixels must be an array of 16 colors';
-  END IF;
-
-  -- 新しい絵を投稿
-  INSERT INTO posts (title, pixels, is_exchanged)
-  VALUES (new_title, new_pixels, FALSE)
-  RETURNING id INTO new_post_id;
-
-  -- 交換相手を検索（競合回避のためFOR UPDATE SKIP LOCKED）
-  SELECT id, title, pixels, created_at
-  INTO exchanged_post
-  FROM posts
-  WHERE is_exchanged = FALSE
-    AND id != new_post_id
-  ORDER BY RANDOM()
-  LIMIT 1
-  FOR UPDATE SKIP LOCKED;
-
-  -- 交換相手が見つかった場合
-  IF exchanged_post.id IS NOT NULL THEN
-    -- 交換済みに更新
-    UPDATE posts
-    SET is_exchanged = TRUE
-    WHERE id = exchanged_post.id;
-
-    -- 結果を構築
-    result := jsonb_build_object(
-      'id', exchanged_post.id,
-      'title', exchanged_post.title,
-      'pixels', exchanged_post.pixels::TEXT,
-      'created_at', exchanged_post.created_at
-    );
-    
-    RETURN result;
-  END IF;
-
-  -- 交換相手なし
-  RETURN NULL;
-END;
-$$;
-```
-
-#### 使用例（クライアント側）
-
-```typescript
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
-
-const { data, error } = await supabase.rpc('exchange_art', {
-  new_title: 'ねこ',
-  new_pixels: JSON.stringify([
-    '#ffffff', '#ffffff', '#ffffff', '#ffffff',
-    '#ffffff', '#ffb7b2', '#ffb7b2', '#ffffff',
-    '#ffffff', '#ffb7b2', '#ffb7b2', '#ffffff',
-    '#ffffff', '#ffffff', '#ffffff', '#ffffff'
-  ])
-});
-
-if (error) {
-  console.error('Exchange failed:', error.message);
-} else if (data) {
-  console.log('Received art:', data);
-  // アルバムに追加
-} else {
-  console.log('No exchange partner available');
-  // 待機メッセージ表示
-}
-```
-
-## エラーハンドリング
-
-### エラーコード一覧
-
-| コード | メッセージ | 原因 |
-|--------|-----------|------|
-| 22001 | Title must be 5 characters or less | タイトルが5文字超過 |
-| 22023 | Pixels must be an array of 16 colors | pixels配列の形式不正 |
-| PGRST | 各種PostgreSTエラー | Supabaseクライアントエラー |
-
-### クライアント側エラーハンドリング
-
-```typescript
-try {
-  const { data, error } = await supabase.rpc('exchange_art', { ... });
-  
-  if (error) {
-    // Supabaseエラー
-    throw new Error(error.message);
-  }
-  
-  // 成功処理
-} catch (e) {
-  // ネットワークエラーなど
-  alert('エラー：' + e.message);
-}
-```
+| SQLSTATE | メッセージ | 原因 |
+|----------|-----------|------|
+| 22001 | Title must be 5 characters or less | タイトル超過 |
+| 22023 | Pixels must be an array of 16 colors | 配列形式不正 |
+| 22023 | Invalid pixel format | HEX形式不正 |
+| 22023 | Invalid fingerprint format | fingerprint形式不正 |
+| 22023 | Empty canvas with no title | 全白+タイトル空 |
+| 22023 | Title contains inappropriate words | NGワード検出 |
+| 22023 | Title contains invalid characters | 特殊文字検出 |
 
 ## セキュリティ
 
 ### SECURITY DEFINER
 
-- 関数はテーブル所有者の権限で実行
-- RLSポリシーをバイパス可能
-- 入力バリデーションを関数内で必須実施
+- RLSをバイパスして実行
+- 入力バリデーションは関数内で必須
+- DBへの書き込みはこのRPC関数経由のみ
 
-### SQL Injection対策
+### Rate Limiting
 
-- パラメータ化クエリを使用
-- 動的SQLは使用しない
-- 入力値の型チェックをPostgreSQLが自動実行
+Vercel Edge Middlewareで実装（@upstash/ratelimit + Redis）
 
-### Rate Limiting（推奨）
+| 制限 | 値 | 目的 |
+|------|-----|------|
+| 短期 | 3 posts/20sec | バースト防止 |
+| 長期 | 20 posts/300sec | 持続的な乱用防止 |
 
-Supabase Edge Functionsまたはクライアント側で実装:
+超過時: `429 Too Many Requests`
 
-```typescript
-// クライアント側の簡易レート制限
-const EXCHANGE_COOLDOWN = 5000; // 5秒
-let lastExchangeTime = 0;
+### NGワード
 
-async function handleExchange() {
-  const now = Date.now();
-  if (now - lastExchangeTime < EXCHANGE_COOLDOWN) {
-    alert('少し待ってから再度お試しください');
-    return;
-  }
-  lastExchangeTime = now;
-  
-  // exchange_art 呼び出し
-}
-```
+- 管理場所: RPC関数内にハードコード（クライアントから隠蔽）
+- マッチング: 部分一致、大文字小文字無視
+- 初期リスト: 差別用語、暴力的表現（5〜10語程度）
 
-## 監視・ロギング
-
-### 推奨ログ項目
+## 監視項目（推奨）
 
 - 関数呼び出し回数
 - 交換成功率
 - 平均レスポンスタイム
 - エラー発生率
-
-### Supabase Dashboard
-
-- Database > Logs でクエリログ確認
-- API > Logs でRPC呼び出しログ確認
+- レートリミット発動回数

@@ -1,190 +1,200 @@
-## 改修ロードマップ
+# 改修ロードマップ
 
-### Phase 0: 基盤整備（現在）
+## このファイルについて
+
+4x4 Pixel Diaryの改修ロードマップ。本ドキュメントを参照して改修を進めるが、ユーザー指示や実装方針と矛盾する場合は質問すること。
+
+## ロードマップ概要
+
+| Phase | 内容 | 目安 |
+|-------|------|------|
+| Phase 0 | 基盤整備 | 完了 |
+| Phase 1 | 基盤強化 | 1日 |
+| Phase 2 | UX改善 | 1日 |
+| Phase 3 | ユーザー認証 + ソーシャル機能 | 1週間 |
+| Phase 4 | 収益化とスケール | 1ヶ月 |
+
+## アーキテクチャ方針
+
+### サーバーサイド処理の役割分担
+
+| レイヤー | 役割 | 実装 |
+|----------|------|------|
+| Edge Middleware | IP/UAベースの一次防御、DoS対策、レートリミット | Vercel Edge Middleware + @upstash/ratelimit |
+| Server Actions | クライアントからの入口、fingerprint/IP取得、RPC呼び出し | Next.js Server Actions |
+| RPC関数 | 入力バリデーション、ビジネスロジック、DB操作 | Supabase RPC (SECURITY DEFINER) |
+
+**原則**: DBのpostsテーブルへの書き込みは `exchange_art` RPC関数経由のみ。直接のINSERT/UPDATE/DELETEはRLSで禁止。
+
+---
+
+## Phase 0: 基盤整備 ✅
+
 - [x] Vercel公開
-- [ ] 環境変数設定
-- [ ] 本番DBマイグレーション確認
-- [ ] ドメイン設定（任意）
+- [x] 環境変数設定
+- [x] 本番DBマイグレーション確認
 
 ---
 
-### Phase 1: 基盤強化（1〜2週間）
+## Phase 1: 基盤強化
 
-#### 1.1 DBスキーマ改善
-```sql
--- 将来の拡張を見据えた設計
-ALTER TABLE posts ADD COLUMN user_id UUID REFERENCES auth.users(id);
-ALTER TABLE posts ADD COLUMN likes_count INT DEFAULT 0;
-ALTER TABLE posts ADD COLUMN reported BOOLEAN DEFAULT FALSE;
-ALTER TABLE posts ADD COLUMN created_by_ip TEXT; -- 不正対策用
-```
+### 1.1 DBスキーマ改善
 
-#### 1.2 サーバー側強化
-- **Rate Limiting**: Supabase Edge Functions または Vercel Edge Middleware
-- **入力サニタイズ**: HEXカラー形式の厳密検証
-- **不正リクエスト対策**: IPベースの一時的ブロック
+postsテーブルに以下カラムを追加:
+- `user_id` (UUID, nullable) - 将来の認証連携用
+- `likes_count` (INT) - いいね数
+- `report_count` (INT) - 通報数
+- `ip_address` (INET) - 不正対策用
+- `fingerprint` (TEXT) - 匿名ユーザー識別用（UUID v4形式）
+- `work_seconds` (INT) - 作業時間（秒）
 
-#### 1.3 クライアント最適化（doc/improvement-notes.md の内容）
-- Supabaseシングルトン化
-- CSS transition削除
-- Hydrationローディング表示
+### 1.2 サーバー側強化
+
+| 優先度 | 項目 | 詳細 |
+|--------|------|------|
+| P0 | HEXカラー検証 | 各要素が `/^#[0-9a-fA-F]{6}$/` に適合 |
+| P0 | 盤面データ検証 | 配列長16固定、全要素がHEX形式 |
+| P1 | タイトル検証 | 5文字以内、トリム、特殊文字除去（絵文字は許可） |
+| P1 | fingerprint検証 | UUID v4形式 |
+| P1 | 全白+タイトル空拒否 | RPC関数内でFR-004バリデーション実施 |
+| P1 | 自己投稿除外 | fingerprintで同一ユーザーの過去投稿すべてを交換対象から除外 |
+| P1 | レートリミット | Vercel Edge Middleware + @upstash/ratelimit（3 posts/20sec, 20 posts/300sec） |
+| P1 | 同一盤面チェック | 既存と同じpixels → 投稿せずduplicate応答 |
+| P2 | NGワードチェック | RPC関数内にハードコード、部分一致、大文字小文字無視 |
+| P2 | pixels型正規化 | Server Actions層でRPC戻り値をパースし、型を統一 |
+| P2 | 作業時間計測 | クライアント側でアクティブ時間計測、RPC関数でクリップ（5〜3600秒） |
+| - | Supabaseシングルトン化 | コネクション管理の最適化 |
+
+### 1.3 fingerprint管理
+
+- 初回訪問時にUUID v4を生成しlocalStorageに保存
+- キー名: `pixel_diary_fingerprint`
+- localStorage無効時はセッション中のみメモリ保持
+
+### 1.4 テスト戦略
+
+| 種別 | 対象 | ツール |
+|------|------|--------|
+| Unit | lib/actions.ts, hooks | Vitest |
+| E2E | 交換フロー全体、エラーケース | Playwright |
+| 視覚回帰 | UIコンポーネント | Playwright screenshot |
 
 ---
 
-### Phase 2: UX改善（1〜2週間）
+## Phase 2: UX改善
 
-#### 2.1 UI/UXブラッシュアップ
-- **ローディング状態**: スケルトンUI
-- **エラー表示**: トースト通知（react-hot-toast等）
-- **アニメーション**: 交換成功時のエフェクト
-- **レスポンシブ強化**: タブレット/モバイル対応
+### 2.1 UI/UXブラッシュアップ
 
-#### 2.2 PWA対応
-- `next-pwa` 導入
-- オフラインキャッシュ
-- ホーム画面追加対応
+#### 2.1.1 UIフレームワーク
+- shadcn/ui 導入
+- next-themes（ダークモード対応）
+- 既存デザイン仕様（カラーパレット・レイアウト・フォント）をTailwind/Theme設定に反映
+- ダークモード用カラーパレット適用
+
+#### 2.1.2 フィードバック改善
+
+| 優先度 | 項目 | 詳細 |
+|--------|------|------|
+| P1 | 確認ダイアログ | confirm()をshadcn/ui AlertDialogに置換 |
+| P1 | トースト通知 | alert()をsonnerに置換 |
+| P2 | ローディング | スケルトンUI、Hydrationローディング |
+| P2 | アニメーション | 交換成功時エフェクト |
+
+#### 2.1.3 パフォーマンス最適化
+
+| 優先度 | 項目 | 詳細 |
+|--------|------|------|
+| P1 | Web Vitals計測 | Next.js標準 + Vercel Analytics導入 |
+| P1 | フォント最適化 | `font-display: swap`、next/font使用 |
+| P2 | FCP/LCPボトルネック調査 | Lighthouse / PageSpeed Insights |
+
+#### 2.1.4 レスポンシブ強化
+- モバイル/タブレット最適化
+
+### 2.2 PWA対応（ライト版）
+- next-pwa導入
+- manifest / icons整備（ホーム画面追加可能にする）
+- App Shell（トップページ）＋静的アセットのキャッシュ
+- オフライン時：
+  - アプリ起動・アルバム閲覧は可能（localStorage依存）
+  - 「こうかんする」は無効化し、「オフラインのため交換できません」などのメッセージ表示
+- ※ オフライン投稿キュー / バックグラウンド同期 / Push通知などは Phase3+ で検討
 
 ---
 
-### Phase 3: ユーザー認証 + ソーシャル機能（2〜3週間）
+## Phase 3: ユーザー認証 + ソーシャル機能
 
-#### 3.1 認証システム
-```
-┌─────────────────────────────────────────┐
-│  認証方式の選択肢                        │
-├─────────────────────────────────────────┤
-│  A) Supabase Auth (推奨)                │
-│     - メール/パスワード                  │
-│     - OAuth (Google, Twitter, etc.)     │
-│     - 匿名認証 → アカウント昇格          │
-│                                         │
-│  B) 匿名認証のみ (簡易版)               │
-│     - デバイスID + localStorage         │
-│     - クラウド同期なし                   │
-└─────────────────────────────────────────┘
-```
+### 3.1 認証システム（Supabase Auth）
+- メール/パスワード
+- OAuth（Google, Twitter等）
+- 匿名認証 → アカウント昇格
 
-#### 3.2 クラウド保存
-- 認証済みユーザーのアルバムをSupabaseに保存
-- localStorage → Supabase 移行スクリプト
+### 3.2 クラウド保存
+- アルバムのSupabase保存
+- localStorage → Supabase移行
 - デバイス間同期
 
-#### 3.3 いいねシステム
-```sql
-CREATE TABLE likes (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID REFERENCES auth.users(id),
-  post_id UUID REFERENCES posts(id),
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE(user_id, post_id)
-);
-```
+### 3.3 いいねシステム
+likesテーブル: user_id, post_id, created_at（UNIQUE制約）
 
-#### 3.4 通報/BANシステム
-```sql
-CREATE TABLE reports (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  reporter_id UUID REFERENCES auth.users(id),
-  post_id UUID REFERENCES posts(id),
-  reason TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
+### 3.4 通報/BANシステム
+- reportsテーブル: reporter_id, post_id, reason
+- banned_usersテーブル: user_id, reason, expires_at
 
-CREATE TABLE banned_users (
-  user_id UUID PRIMARY KEY REFERENCES auth.users(id),
-  reason TEXT,
-  banned_at TIMESTAMPTZ DEFAULT NOW(),
-  expires_at TIMESTAMPTZ
-);
-```
-
----
-
-### Phase 4: 収益化（2〜4週間）
-
-#### 4.1 広告
-- **Google AdSense**: バナー広告
-- **配置**: アルバムセクション下部、交換完了後
-- **実装**: `next/script` で遅延読み込み
-
-#### 4.2 サブスク課金
-```
-┌─────────────────────────────────────────┐
-│  決済プラットフォーム選択                │
-├─────────────────────────────────────────┤
-│  A) Stripe (推奨)                       │
-│     - Stripe Checkout / Payment Links   │
-│     - Webhook → Supabaseで権限管理      │
-│                                         │
-│  B) RevenueCat                          │
-│     - モバイルアプリ展開時に有利         │
-│     - Web + App 統合管理                │
-└─────────────────────────────────────────┘
-```
-
-#### 4.3 プレミアム特典案
-| 特典 | 無料 | プレミアム |
-|------|------|-----------|
-| 広告 | あり | なし |
-| アルバム保存数 | 50枚 | 無制限 |
-| カスタムスキン | なし | あり |
-| 特殊カラーパレット | なし | あり |
-| 優先交換マッチング | なし | あり |
-
----
-
-## 追加提案
-
-### 1. アナリティクス
-- **Vercel Analytics**: パフォーマンス計測
-- **PostHog / Mixpanel**: ユーザー行動分析
-- **Supabase**: 交換成功率、滞在時間などカスタム指標
-
-### 2. 多言語対応（i18n）
-- `next-intl` または `next-i18next`
-- 日本語 / 英語 / 韓国語 など
-
-### 3. ギャラリー機能
-- 交換済みの絵を匿名公開
+### 3.5 ギャラリー機能
+- 交換済み絵の匿名公開
 - いいねランキング
 - 期間限定イベント
 
-### 4. NFT化（検討段階）
-- 特に人気の高い作品をNFT化
-- Supabase + Web3ウォレット連携
+### 3.6 アナリティクス
 
-### 5. モバイルアプリ化
-- **Capacitor**: 既存コードをネイティブアプリ化
-- **React Native**: 完全ネイティブ（大規模改修）
+| 優先度 | 項目 | 詳細 |
+|--------|------|------|
+| P2 | パフォーマンス監視 | FCP/LCP閾値アラート（NFR-002準拠） |
+| - | ユーザー行動分析 | PostHog / Mixpanel |
+| - | カスタム指標 | 交換成功率、滞在時間等 |
 
-### 6. セキュリティ強化
-- **CSP (Content Security Policy)**: XSS対策
-- **CORS設定**: API保護
-- **Cloudflare**: DDoS対策、WAF
+### 3.7 ユーザーフロー拡張
+- 匿名利用フローとログイン済みフローの2パターンに分岐
+- requirements.mdのユーザーフロー図を更新
 
 ---
 
-## 優先順位の提案
+## Phase 4: 収益化とスケール
 
-```
-必須 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- │
- │  Phase 0: 環境変数設定
- │  Phase 1.2: Rate Limiting + 不正対策
- │  Phase 1.3: クライアント最適化
- │
-推奨 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- │
- │  Phase 2.1: UX改善
- │  Phase 3.1-3.2: 認証 + クラウド保存
- │
-収益化 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- │
- │  Phase 4.1: 広告
- │  Phase 3.3-3.4: いいね + 通報システム
- │  Phase 4.2-4.3: サブスク
- │
-将来 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- │
- └  ギャラリー、多言語、モバイルアプリ
-```
+### 4.1 広告
+- Google AdSense（アルバム下部、交換完了後）
+
+### 4.2 サブスク課金（Stripe）
+- Stripe Checkout / Payment Links
+- Webhook → Supabase権限管理
+
+### 4.3 プレミアム特典
+
+| 特典 | 無料 | プレミアム |
+|------|------|-----------|
+| 広告 | あり | なし |
+| アルバム保存数 | 100枚 | 無制限 |
+| カスタムスキン | なし | あり |
+
+### 4.4 多言語対応（i18n）
+- next-intl: 日本語 / 英語 / 韓国語
+
+### 4.5 モバイルアプリ化
+- Capacitor（既存コード流用）
+
+### 4.6 セキュリティ強化
+- CSP、CORS設定
+- Cloudflare（DDoS対策、WAF）
+
+---
+
+## ドキュメント運用ルール
+
+| 対象 | 同期タイミング |
+|------|----------------|
+| database-schema.md | マイグレーション作成時に更新 |
+| api-spec.md | RPC関数変更時に更新 |
+| requirements.md | 機能追加/変更時に更新 |
+
+※ マイグレーションファイルが正、ドキュメントは参照用
